@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scattered — You need to be scattered.</title>
+  <meta name="description" content="To be really productive in the age of AI, you multitask. Scattered tells you what you were doing in every window, so you can be scattered. Free for macOS.">
+  <meta property="og:title" content="Scattered — You need to be scattered.">
+  <meta property="og:description" content="We tell you what you were doing. So you can be scattered. Free for macOS.">
+  <meta property="og:image" content="assets/overview.jpg?v=2">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="assets/favicon.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { background: #120d1f; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", system-ui, sans-serif;
+      color: #fff; -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    }
+
+    /* One long scroll; the stage sticks while the screens zoom out into cards. */
+    .story { height: 900vh; position: relative; }
+    .stage { position: sticky; top: 0; height: 100vh; overflow: hidden; }
+
+    /* Scattered's backdrop: your desktop, blurred and dimmed behind the glass. */
+    .backdrop { position: absolute; inset: -40px;
+      background: url("assets/wallpaper.jpg") center / cover; filter: blur(28px) brightness(.5) saturate(1.2); }
+
+    /* A screen: a whole desktop, laid out at full viewport size and only ever scaled. */
+    .screen { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; overflow: hidden;
+      transform-origin: 0 0; will-change: transform; background: center / cover no-repeat; }
+    .screen::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(to bottom, rgba(20,10,40,0) 45%, rgba(20,10,40,.3)); }
+    .w-coral { background-image: url("assets/wallpaper.jpg"); }
+    .w-blue { background-image: url("assets/wallpaper-blue.jpg"); }
+    .w-violet { background-image: url("assets/wallpaper.jpg"); filter: hue-rotate(-28deg) saturate(1.1); }
+    .w-violet > * { filter: hue-rotate(28deg); }
+
+    .menubar { position: absolute; top: 0; left: 0; right: 0; height: 32px; z-index: 2;
+      display: flex; align-items: center; justify-content: space-between; padding: 0 14px;
+      font-size: 13.5px; text-shadow: 0 1px 3px rgba(40,10,40,.35); }
+    .menubar .left, .menubar .right { display: flex; align-items: center; gap: 18px; }
+    .menubar .app { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+    .menubar .app img { width: 17px; height: 17px; }
+    .menubar .item { font-weight: 500; }
+    .menubar svg { width: 17px; height: 17px; fill: none; stroke: #fff; stroke-width: 1.7; }
+    .menubar .clock { font-weight: 500; font-variant-numeric: tabular-nums; }
+
+    .text { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; text-align: center; padding: 0 7vw 4vh; }
+    .text h1 { font-size: clamp(52px, 9vw, 140px); font-weight: 750; letter-spacing: -0.045em; line-height: .98;
+      text-shadow: 0 6px 40px rgba(70,15,50,.25); }
+    .text h2 { font-size: clamp(36px, 5.6vw, 86px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.04;
+      max-width: 1150px; margin: 0 auto; text-shadow: 0 6px 40px rgba(20,10,50,.25); text-wrap: balance; }
+    .text .soft { display: block; color: rgba(255,255,255,.62); }
+    .text .kicker { font-size: clamp(14px, 1.2vw, 17px); font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+      opacity: .8; margin-bottom: 20px; }
+    .hint { position: absolute; bottom: 5vh; left: 0; right: 0; text-align: center; z-index: 1;
+      font-size: 13px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; opacity: .75; }
+    .hint::after { content: ""; display: block; width: 1px; height: 34px; margin: 10px auto 0;
+      background: linear-gradient(#fff, transparent); animation: drip 1.8s ease-in-out infinite; }
+    @keyframes drip { 0% { transform: scaleY(0); transform-origin: top; } 50% { transform: scaleY(1); transform-origin: top; }
+                      51% { transform-origin: bottom; } 100% { transform: scaleY(0); transform-origin: bottom; } }
+
+    /* A work screen: one app window on the desktop. */
+    .appwin { position: absolute; z-index: 1; left: 9vw; right: 9vw; top: 9vh; bottom: 7vh; border-radius: 22px; overflow: hidden;
+      display: flex; flex-direction: column; background: #1d1b22;
+      box-shadow: 0 40px 100px rgba(20,5,30,.5), 0 0 0 1px rgba(255,255,255,.14) inset; }
+    .appwin .bar { height: 40px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px; position: relative;
+      background: #2a2731; border-bottom: 1px solid rgba(255,255,255,.07); }
+    .appwin .bar i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+    .appwin .bar i:nth-child(1) { background: #ff5f57; } .appwin .bar i:nth-child(2) { background: #febc2e; } .appwin .bar i:nth-child(3) { background: #28c840; }
+    .appwin .bar span { position: absolute; left: 0; right: 0; text-align: center; font-size: 13px; font-weight: 600; opacity: .8; }
+    .appwin .content { flex: 1; background: center / cover no-repeat; }
+
+    /* Scattered cards: the screen lands in the preview, the context fades in beside it. */
+    .card { position: absolute; z-index: 1; border-radius: 22px; opacity: 0; transform: translateY(14px) scale(.98);
+      background: rgba(250,248,252,.94); color: #1d1a24;
+      box-shadow: 0 24px 60px rgba(10,0,20,.35), 0 0 0 1px rgba(255,255,255,.6) inset;
+      transition: opacity .45s ease, transform .45s cubic-bezier(.2,.7,.2,1); }
+    .card.on { opacity: 1; transform: none; }
+    .card .head { position: absolute; left: 18px; right: 18px; top: 14px; display: flex; align-items: flex-start; gap: 9px; }
+    .card .ico { width: 18px; height: 18px; border-radius: 5px; flex: none; margin-top: 2px; display: grid; place-items: center;
+      font-size: 10px; font-weight: 800; color: #fff; }
+    .card .title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card .sub { font-size: 12px; color: #7a7485; margin-top: 2px; }
+    .card .chip { margin-left: auto; flex: none; font-size: 11px; font-weight: 650; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+    .chip.waiting { color: #c25a00; background: rgba(255,149,0,.16); }
+    .chip.working { color: #1d5fd1; background: rgba(0,122,255,.12); }
+    .card .ctx { position: absolute; top: 58px; bottom: 14px; right: 18px; overflow: hidden; }
+    .ctx .todo { background: rgba(0,122,255,.1); border-radius: 10px; padding: 6px 10px; margin-bottom: 9px; }
+    .ctx .todo b { display: block; font-size: 9.5px; letter-spacing: .08em; color: #1d6ef0; }
+    .ctx .todo span { font-size: 12.5px; font-weight: 650; }
+    .ctx .lbl { font-size: 9.5px; font-weight: 700; letter-spacing: .09em; color: #8a8494; }
+    .ctx .note { font-size: 15px; font-weight: 700; line-height: 1.25; margin-top: 4px; letter-spacing: -0.01em; }
+    .ctx .ai { font-size: 11.5px; color: #8a8494; margin-top: 5px; }
+    .ctx .steps { margin-top: 9px; display: grid; gap: 5px; }
+    .ctx .steps div { display: grid; grid-template-columns: 38px 1fr; font-size: 12px; color: #4b4555; line-height: 1.3; }
+    .ctx .steps time { color: #9a94a3; font-variant-numeric: tabular-nums; }
+
+    .headline { position: absolute; left: 0; right: 0; z-index: 30; text-align: center; padding: 0 5vw; opacity: 0;
+      transform: translateY(16px); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1); pointer-events: none; }
+    .headline.on { opacity: 1; transform: none; }
+    .headline h2 { font-size: clamp(26px, 3.3vw, 48px); font-weight: 750; letter-spacing: -0.035em; line-height: 1.05;
+      text-shadow: 0 4px 30px rgba(20,5,30,.4); text-wrap: balance; }
+    .headline h2 span { color: rgba(255,255,255,.65); }
+
+    .after { min-height: 60vh; display: grid; place-items: center; text-align: center; padding: 10vh 6vw 14vh;
+      background: linear-gradient(#120d1f, #1a1030); }
+    .btn { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: #fff; font-weight: 650; font-size: 17px;
+      padding: 15px 28px; border-radius: 999px; background: rgba(255,255,255,.14);
+      box-shadow: 0 0 0 1px rgba(255,255,255,.35) inset, 0 12px 40px rgba(40,10,50,.35); transition: transform .2s; }
+    .btn:hover { transform: translateY(-2px); }
+    .req { margin-top: 14px; font-size: 13.5px; opacity: .7; }
+
+    @media (max-width: 760px) { .menubar .item, .menubar .hide-sm { display: none; } .card .steps { display: none; } }
+  </style>
+</head>
+<body>
+  <template id="menubar">
+    <div class="menubar" aria-hidden="true">
+      <div class="left">
+        <span class="app"><img src="assets/favicon.png" alt=""><span class="appname">Scattered</span></span>
+        <span class="item">File</span><span class="item">Edit</span><span class="item">View</span>
+        <span class="item">Window</span><span class="item">Help</span>
+      </div>
+      <div class="right">
+        <svg class="hide-sm" viewBox="0 0 24 24"><rect x="2.5" y="7" width="17" height="10" rx="3"/><rect x="5" y="9.5" width="10" height="5" rx="1.2" fill="#fff" stroke="none"/><path d="M21.5 10.5v3"/></svg>
+        <svg class="hide-sm" viewBox="0 0 24 24"><path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.3a9.5 9.5 0 0 1 13 0M8.6 15.5a5 5 0 0 1 6.8 0"/><circle cx="12" cy="18.6" r="1.1" fill="#fff" stroke="none"/></svg>
+        <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg>
+        <svg class="hide-sm" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="6" rx="3"/><rect x="3" y="13" width="18" height="6" rx="3"/><circle cx="16" cy="8" r="1.6" fill="#fff" stroke="none"/><circle cx="8" cy="16" r="1.6" fill="#fff" stroke="none"/></svg>
+        <span class="clock"></span>
+      </div>
+    </div>
+  </template>
+
+  <main class="story" id="story">
+    <div class="stage" id="stage">
+      <div class="backdrop" aria-hidden="true"></div>
+
+      <!-- Screens, in the order you scroll through them. Each card's context
+           is what Scattered would tell you about that screen. -->
+      <section class="screen w-coral" data-app="Scattered" data-reveal="end"
+        data-title="You need to be scattered." data-sub="Safari · 4 min ago" data-ico="S" data-color="#ff6a5c"
+        data-note="Read why being scattered is the point, not the problem."
+        data-steps="09:38|Landing page: “You need to be scattered.”;09:37|Opened scattered.app from a friend’s post">
+        <div class="text"><h1>You need to be<br>scattered.</h1></div>
+        <div class="hint">Scroll</div>
+      </section>
+      <section class="screen w-blue" data-app="Scattered" data-reveal="end"
+        data-title="The age of AI" data-sub="Safari · 3 min ago" data-ico="S" data-color="#3d7bff"
+        data-note="With AI you run several things at once — multitasking is the job now."
+        data-steps="09:39|“To be really productive with AI, you have to multitask.”">
+        <div class="text"><p class="kicker">The age of AI</p><h2>To be really productive with AI, <span class="soft">you have to multitask.</span></h2></div>
+      </section>
+      <section class="screen w-violet" data-app="Scattered" data-reveal="end"
+        data-title="Mission Control" data-sub="Safari · 3 min ago" data-ico="S" data-color="#b04cff"
+        data-note="Mission Control shows your windows, not what you were doing in them."
+        data-steps="09:40|“Mission Control is a great tool. But it’s outdated in the age of AI.”">
+        <div class="text"><h2>Mission Control is a great tool. <span class="soft">But it’s outdated in the age of AI.</span></h2></div>
+      </section>
+      <section class="screen w-coral" data-app="Devin"
+        data-title="Fix drag-to-reorder in the to-do list" data-sub="Devin · 2 min ago" data-ico="D" data-color="#1f1f24"
+        data-chip="waiting" data-todo="Answer Devin about the drag handle"
+        data-note="Devin fixed the drag handle and asks whether to keep the grip visible on hover."
+        data-steps="09:41|Devin pushed a fix for the to-do grip;09:33|Devin reproduced the drag bug in the overview">
+        <div class="appwin"><div class="bar"><i></i><i></i><i></i><span>Devin — Fix drag-to-reorder</span></div>
+          <div class="content" style="background-image:url('assets/windows/9301.jpg')"></div></div>
+      </section>
+      <section class="screen w-blue" data-app="ChatGPT"
+        data-title="Launch post for Scattered" data-sub="ChatGPT · just now" data-ico="G" data-color="#10a37f"
+        data-chip="working"
+        data-note="Drafting the launch post; two hooks to choose from, still writing the ending."
+        data-steps="09:42|Comparing hook A “You need to be scattered” with hook B;09:35|Asked for a post about the Mission Control idea">
+        <div class="appwin"><div class="bar"><i></i><i></i><i></i><span>ChatGPT — Launch post</span></div>
+          <div class="content" style="background-image:url('assets/windows/9401.jpg')"></div></div>
+      </section>
+      <section class="screen w-violet" data-app="Figma"
+        data-title="Board deck — Q3 cover" data-sub="Figma · 25 min ago" data-ico="F" data-color="#f24e1e"
+        data-todo="Send the Q3 deck to Mara"
+        data-note="Laying out the Q3 cover; stopped at the headline size for the title slide."
+        data-steps="09:18|Tried three headline sizes on the title slide;09:05|Imported the Q3 figures from the dashboard">
+        <div class="appwin"><div class="bar"><i></i><i></i><i></i><span>Figma — Board deck</span></div>
+          <div class="content" style="background-image:url('assets/windows/9003.jpg')"></div></div>
+      </section>
+
+      <div class="headline" id="headline"><h2>We tell you what you were doing. <span>So you can be scattered.</span></h2></div>
+    </div>
+  </main>
+
+  <section class="after">
+    <div>
+      <!-- Becomes a download link once the notarized release is out. -->
+      <span class="btn" style="cursor:default">Coming soon for Mac</span>
+      <p class="req">Free · macOS 26 or later · Apple silicon</p>
+    </div>
+  </section>
+
+  <script>
+    const stage = document.getElementById("stage");
+    const story = document.getElementById("story");
+    const headline = document.getElementById("headline");
+    const screens = [...document.querySelectorAll(".screen")];
+    const N = screens.length;
+
+    // Each screen gets a menu bar (with its own app name) and a card holding its context.
+    const tpl = document.getElementById("menubar");
+    const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const cards = screens.map((s, i) => {
+      const bar = tpl.content.cloneNode(true);
+      bar.querySelector(".appname").textContent = s.dataset.app;
+      s.prepend(bar);
+      const d = s.dataset, c = document.createElement("div");
+      c.className = "card";
+      c.style.zIndex = 5;
+      const steps = (d.steps || "").split(";").filter(Boolean).map(x => x.split("|"))
+        .map(([t, txt]) => `<div><time>${t}</time><span>${esc(txt)}</span></div>`).join("");
+      const chip = d.chip === "waiting" ? `<span class="chip waiting">✋ Waiting for you</span>`
+                 : d.chip === "working" ? `<span class="chip working">◌ Working</span>` : "";
+      c.innerHTML = `
+        <div class="head"><span class="ico" style="background:${d.color}">${d.ico}</span>
+          <div style="min-width:0"><div class="title">${esc(d.title)}</div><div class="sub">${esc(d.sub)}</div></div>${chip}</div>
+        <div class="ctx">
+          ${d.todo ? `<div class="todo"><b>WORKING ON</b><span>○ ${esc(d.todo)}</span></div>` : ""}
+          <div class="lbl">WHERE YOU LEFT OFF</div>
+          <div class="note">${esc(d.note)}</div>
+          <div class="ai">✦ AI note · ${esc(d.sub.split("·").pop().trim())}</div>
+          <div class="steps">${steps}</div>
+        </div>`;
+      stage.appendChild(c);
+      return c;
+    });
+
+    const clocks = document.querySelectorAll(".clock");
+    const tick = () => {
+      const d = new Date();
+      const t = d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).replace(",", "")
+        + "  " + d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+      clocks.forEach(c => c.textContent = t);
+    };
+    tick(); setInterval(tick, 10_000);
+
+    const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const clamp = t => Math.min(1, Math.max(0, t));
+    const lerp = (a, b, t) => a + (b - a) * t;
+
+    // The Scattered overview: a grid of cards, two per row, under the headline.
+    function layout() {
+      const W = innerWidth, H = innerHeight;
+      const cols = W < 820 ? 1 : 2, rows = Math.ceil(N / cols);
+      const top = Math.max(96, H * 0.15), padX = Math.max(16, W * 0.04), gap = Math.max(12, W * 0.012);
+      const cw = (W - 2 * padX - (cols - 1) * gap) / cols;
+      const ch = Math.min(260, (H - top - 20 - (rows - 1) * gap) / rows);
+      const prevH = ch - 72, prevW = Math.min(prevH * W / H, cw * 0.46);
+      const slots = screens.map((_, i) => {
+        const r = Math.floor(i / cols), c = i % cols;
+        const x = padX + c * (cw + gap), y = top + r * (ch + gap);
+        return { x, y, px: x + 18, py: y + 58 };
+      });
+      return { W, H, cw, ch, prevW, prevH: prevW * H / W, slots, top };
+    }
+
+    function frame() {
+      const L = layout();
+      const r = story.getBoundingClientRect();
+      const p = clamp(-r.top / (r.height - L.H));
+      const steps = N + 0.7;                   // one beat per screen, then the headline and a hold
+      const revealed = p * steps > N - 0.12;   // the moment Scattered tells you what you were doing
+      screens.forEach((el, i) => {
+        // Per beat: the screen comes in over the overview, you read it,
+        // it shrinks into its card, and its context appears.
+        const u = p * steps - i;
+        const enter = i === 0 ? 1 : ease(clamp(u / 0.2));
+        const shrink = ease(clamp((u - 0.4) / 0.45));
+        const s = L.slots[i];
+        let x, y, sc;
+        if (shrink > 0) {
+          sc = lerp(1, L.prevW / L.W, shrink); x = lerp(0, s.px, shrink); y = lerp(0, s.py, shrink);
+        } else {
+          sc = lerp(1.06, 1, enter); x = -(sc - 1) * L.W / 2; y = -(sc - 1) * L.H / 2;
+        }
+        el.style.transform = `translate(${x}px, ${y}px) scale(${sc})`;
+        el.style.opacity = u < 0 && i > 0 ? 0 : enter;
+        el.style.visibility = u < -0.05 && i > 0 ? "hidden" : "visible";
+        el.style.borderRadius = `${lerp(0, 12, shrink) / sc}px`;
+        // The first screens land as bare thumbnails, like Mission Control: no context
+        // yet. Their cards only appear when the headline says what Scattered does.
+        const cardOn = shrink > 0.96 && (el.dataset.reveal !== "end" || revealed);
+        el.style.boxShadow = shrink > 0 && !cardOn ? `0 ${30 / sc * shrink}px ${80 / sc * shrink}px rgba(10,0,20,${.4 * shrink})` : "none";
+        el.style.zIndex = shrink >= 1 ? 10 : 100 + i;
+        const c = cards[i];
+        Object.assign(c.style, { left: `${s.x}px`, top: `${s.y}px`, width: `${L.cw}px`, height: `${L.ch}px` });
+        c.querySelector(".ctx").style.left = `${18 + L.prevW + 16}px`;
+        c.classList.toggle("on", cardOn);
+      });
+      headline.style.top = `${Math.max(40, L.top * 0.32)}px`;
+      headline.classList.toggle("on", revealed);
+    }
+
+    let queued = false;
+    const onScroll = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; frame(); }); } };
+    addEventListener("scroll", onScroll, { passive: true });
+    addEventListener("resize", onScroll);
+    frame();
+  </script>
+</body>
+</html>
