@@ -19,7 +19,7 @@
     }
 
     /* One long scroll; the stage sticks while the screens zoom out into cards. */
-    .story { height: 900vh; position: relative; }
+    .story { height: 620vh; position: relative; }
     .stage { position: sticky; top: 0; height: 100vh; overflow: hidden; }
 
     /* Scattered's backdrop: your desktop, blurred and dimmed behind the glass. */
@@ -159,7 +159,7 @@
         data-steps="09:40|“Mission Control is a great tool. But it’s outdated in the age of AI.”">
         <div class="text"><h2>Mission Control is a great tool. <span class="soft">But it’s outdated in the age of AI.</span></h2></div>
       </section>
-      <section class="screen w-coral" data-app="Devin"
+      <section class="screen w-coral" data-app="Devin" data-mode="slide"
         data-title="Fix drag-to-reorder in the to-do list" data-sub="Devin · 2 min ago" data-ico="D" data-color="#1f1f24"
         data-chip="waiting" data-todo="Answer Devin about the drag handle"
         data-note="Devin fixed the drag handle and asks whether to keep the grip visible on hover."
@@ -167,7 +167,7 @@
         <div class="appwin"><div class="bar"><i></i><i></i><i></i><span>Devin — Fix drag-to-reorder</span></div>
           <div class="content" style="background-image:url('assets/windows/9301.jpg')"></div></div>
       </section>
-      <section class="screen w-blue" data-app="ChatGPT"
+      <section class="screen w-blue" data-app="ChatGPT" data-mode="slide"
         data-title="Launch post for Scattered" data-sub="ChatGPT · just now" data-ico="G" data-color="#10a37f"
         data-chip="working"
         data-note="Drafting the launch post; two hooks to choose from, still writing the ending."
@@ -175,7 +175,7 @@
         <div class="appwin"><div class="bar"><i></i><i></i><i></i><span>ChatGPT — Launch post</span></div>
           <div class="content" style="background-image:url('assets/windows/9401.jpg')"></div></div>
       </section>
-      <section class="screen w-violet" data-app="Figma"
+      <section class="screen w-violet" data-app="Figma" data-mode="slide"
         data-title="Board deck — Q3 cover" data-sub="Figma · 25 min ago" data-ico="F" data-color="#f24e1e"
         data-todo="Send the Q3 deck to Mara"
         data-note="Laying out the Q3 cover; stopped at the headline size for the title slide."
@@ -263,18 +263,42 @@
       const L = layout();
       const r = story.getBoundingClientRect();
       const p = clamp(-r.top / (r.height - L.H));
-      const steps = N + 0.7;                   // one beat per screen, then the headline and a hold
-      const revealed = p * steps > N - 0.12;   // the moment Scattered tells you what you were doing
+      // Text screens get a beat each; the work windows share one beat together.
+      const textCount = screens.filter(el => el.dataset.mode !== "slide").length;
+      const steps = textCount + 1 + 0.6;
+      const revealed = p * steps > textCount + 0.9;   // Scattered tells you what you were doing
+      let slideIndex = 0;
       screens.forEach((el, i) => {
-        // Per beat: the screen comes in over the overview, you read it,
-        // it shrinks into its card, and its context appears.
+        const s = L.slots[i], c = cards[i];
+        Object.assign(c.style, { left: `${s.x}px`, top: `${s.y}px`, width: `${L.cw}px`, height: `${L.ch}px` });
+        c.querySelector(".ctx").style.left = `${18 + L.prevW + 16}px`;
+        const thumb = L.prevW / L.W;
+
+        if (el.dataset.mode === "slide") {
+          // Slides in from its side of the screen as a finished card, a little after the one before.
+          const u = p * steps - textCount - slideIndex++ * 0.1;
+          const t = ease(clamp((u - 0.05) / 0.6));
+          const fromLeft = s.x + L.cw / 2 < L.W / 2;
+          const dx = (1 - t) * (fromLeft ? -(s.x + L.cw + 60) : (L.W - s.x + 60));
+          el.style.transform = `translate(${s.px + dx}px, ${s.py}px) scale(${thumb})`;
+          el.style.opacity = 1;
+          el.style.visibility = t > 0 ? "visible" : "hidden";
+          el.style.borderRadius = `${12 / thumb}px`;
+          el.style.boxShadow = "none";
+          el.style.zIndex = 10;
+          c.style.transition = "none";
+          c.style.opacity = t > 0 ? 1 : 0;
+          c.style.transform = `translateX(${dx}px)`;
+          return;
+        }
+
+        // Per beat: the screen comes in over the overview, you read it, it shrinks into its slot.
         const u = p * steps - i;
         const enter = i === 0 ? 1 : ease(clamp(u / 0.2));
         const shrink = ease(clamp((u - 0.4) / 0.45));
-        const s = L.slots[i];
         let x, y, sc;
         if (shrink > 0) {
-          sc = lerp(1, L.prevW / L.W, shrink); x = lerp(0, s.px, shrink); y = lerp(0, s.py, shrink);
+          sc = lerp(1, thumb, shrink); x = lerp(0, s.px, shrink); y = lerp(0, s.py, shrink);
         } else {
           sc = lerp(1.06, 1, enter); x = -(sc - 1) * L.W / 2; y = -(sc - 1) * L.H / 2;
         }
@@ -282,14 +306,11 @@
         el.style.opacity = u < 0 && i > 0 ? 0 : enter;
         el.style.visibility = u < -0.05 && i > 0 ? "hidden" : "visible";
         el.style.borderRadius = `${lerp(0, 12, shrink) / sc}px`;
-        // The first screens land as bare thumbnails, like Mission Control: no context
-        // yet. Their cards only appear when the headline says what Scattered does.
+        // These land as bare thumbnails, like Mission Control; their context
+        // only appears when the headline says what Scattered does.
         const cardOn = shrink > 0.96 && (el.dataset.reveal !== "end" || revealed);
         el.style.boxShadow = shrink > 0 && !cardOn ? `0 ${30 / sc * shrink}px ${80 / sc * shrink}px rgba(10,0,20,${.4 * shrink})` : "none";
         el.style.zIndex = shrink >= 1 ? 10 : 100 + i;
-        const c = cards[i];
-        Object.assign(c.style, { left: `${s.x}px`, top: `${s.y}px`, width: `${L.cw}px`, height: `${L.ch}px` });
-        c.querySelector(".ctx").style.left = `${18 + L.prevW + 16}px`;
         c.classList.toggle("on", cardOn);
       });
       headline.style.top = `${Math.max(40, L.top * 0.32)}px`;
